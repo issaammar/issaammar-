@@ -336,9 +336,8 @@ export default function GameScreen() {
       {/* Victory overlay */}
       {completed && (
         <Animated.View
-          style={styles.victoryOverlay}
+          style={[styles.victoryOverlay, { pointerEvents: "auto" }]}
           entering={FadeIn.duration(timing.victoryIn)}
-          pointerEvents="auto"
         >
           <Confetti active />
           <Animated.Text
