@@ -1,5 +1,6 @@
-// Confetti overlay used in the victory screen.
-// 60-80 small particles fall from above with varied velocities and rotations.
+// Confetti overlay used on victory.
+// Particles use theme-aware blue + on-surface colours so dark mode looks rich
+// (blue + soft white shimmer) rather than washed out.
 
 import React, { useMemo } from "react";
 import { Dimensions, StyleSheet, View } from "react-native";
@@ -13,7 +14,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
-import { colors } from "@/src/game/theme";
+import { useColors } from "@/src/game/theme";
 
 const PARTICLE_COUNT = 70;
 const FALL_DURATION = 3200;
@@ -22,7 +23,7 @@ type Particle = {
   key: number;
   left: number;
   size: number;
-  color: string;
+  isBlue: boolean;
   delay: number;
   duration: number;
   shape: "square" | "rect";
@@ -31,15 +32,14 @@ type Particle = {
   horizontalDrift: number;
 };
 
-const buildParticles = (width: number, height: number): Particle[] => {
+const buildParticles = (width: number): Particle[] => {
   const out: Particle[] = [];
   for (let i = 0; i < PARTICLE_COUNT; i++) {
-    const isBlue = Math.random() < 0.5;
     out.push({
       key: i,
       left: Math.random() * width,
       size: 6 + Math.random() * 8,
-      color: isBlue ? colors.blue : colors.white,
+      isBlue: Math.random() < 0.5,
       delay: Math.random() * 1200,
       duration: FALL_DURATION + Math.random() * 1400 - 700,
       shape: Math.random() < 0.5 ? "square" : "rect",
@@ -54,9 +54,13 @@ const buildParticles = (width: number, height: number): Particle[] => {
 const ConfettiPiece = ({
   p,
   height,
+  blue,
+  white,
 }: {
   p: Particle;
   height: number;
+  blue: string;
+  white: string;
 }) => {
   const fall = useSharedValue(-30);
   const rotate = useSharedValue(p.startRotation);
@@ -116,7 +120,7 @@ const ConfettiPiece = ({
       style={[
         styles.piece,
         animStyle,
-        { left: p.left, backgroundColor: p.color, borderColor: colors.blueSoft },
+        { left: p.left, backgroundColor: p.isBlue ? blue : white },
         shapeStyle,
       ]}
     />
@@ -128,17 +132,21 @@ export const Confetti = React.memo(function Confetti({
 }: {
   active: boolean;
 }) {
+  const c = useColors();
   const { width, height } = Dimensions.get("window");
-  const particles = useMemo(
-    () => buildParticles(width, height),
-    [width, height],
-  );
+  const particles = useMemo(() => buildParticles(width), [width]);
 
   if (!active) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {particles.map((p) => (
-        <ConfettiPiece key={p.key} p={p} height={height} />
+        <ConfettiPiece
+          key={p.key}
+          p={p}
+          height={height}
+          blue={c.blue}
+          white={c.white}
+        />
       ))}
     </View>
   );
@@ -148,6 +156,5 @@ const styles = StyleSheet.create({
   piece: {
     position: "absolute",
     top: 0,
-    borderWidth: 0.5,
   },
 });

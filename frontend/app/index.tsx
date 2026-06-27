@@ -1,126 +1,227 @@
-// Home / main menu screen.
+// Main menu: big level number, prominent Continue button, plus three icon
+// shortcuts (Daily, Awards, Settings) in the top corner, mirroring the
+// reference 'Arrows' app.
 
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { playTap } from "@/src/game/audio";
-import { colors, fonts, spacing } from "@/src/game/theme";
-import { usePlayer } from "@/src/game/usePlayer";
+import { hapticLight, playTap } from "@/src/game/audio";
+import { useSettings } from "@/src/game/settings";
+import { ColorPalette, fonts, spacing, useColors } from "@/src/game/theme";
+import { monthlyProgress, useStats } from "@/src/game/useStats";
 
-const MenuButton = ({
-  label,
+const IconButton = ({
+  c,
+  name,
   onPress,
   testID,
-  variant = "primary",
 }: {
-  label: string;
+  c: ColorPalette;
+  name: React.ComponentProps<typeof Ionicons>["name"];
   onPress: () => void;
   testID: string;
-  variant?: "primary" | "secondary";
-}) => {
-  const isPrimary = variant === "primary";
-  return (
-    <Pressable
-      testID={testID}
-      onPress={() => {
-        playTap();
-        onPress();
-      }}
-      style={({ pressed }) => [
-        styles.btn,
-        isPrimary ? styles.btnPrimary : styles.btnSecondary,
-        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-      ]}
-    >
-      <Text
-        style={[
-          styles.btnLabel,
-          isPrimary ? styles.btnLabelPrimary : styles.btnLabelSecondary,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-};
+}) => (
+  <Pressable
+    testID={testID}
+    onPress={onPress}
+    hitSlop={10}
+    style={({ pressed }) => [
+      styles.iconBtn,
+      {
+        backgroundColor: c.backgroundSecondary,
+        borderColor: c.border,
+      },
+      pressed && { opacity: 0.85, transform: [{ scale: 0.96 }] },
+    ]}
+  >
+    <Ionicons name={name} size={22} color={c.text} />
+  </Pressable>
+);
 
 export default function Home() {
   const router = useRouter();
-  const { player } = usePlayer();
+  const c = useColors();
+  const { stats } = useStats();
+  const { settings } = useSettings();
+
+  const monthly = useMemo(
+    () => monthlyProgress(stats.completedDailies),
+    [stats.completedDailies],
+  );
+
+  const continueLevel = Math.max(1, stats.currentLevel);
+
+  const styles2 = useMemo(() => buildStyles(c), [c]);
+
+  const press = (fn: () => void) => () => {
+    playTap();
+    hapticLight();
+    fn();
+  };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: c.background }]}
+      edges={["top", "bottom"]}
+    >
+      <StatusBar style={settings.darkMode ? "light" : "dark"} />
 
       <View style={styles.topRow}>
         <Animated.Text
-          entering={FadeInDown.duration(500)}
-          style={styles.brand}
+          entering={FadeIn.duration(400)}
+          style={[styles2.brand, { color: c.text }]}
           testID="brand-mark"
         >
-          ARROW ⌁ MAZE
+          Arrows
         </Animated.Text>
-        <View style={styles.you} testID="player-chip">
-          <Text style={styles.youLabel}>YOU</Text>
-          <Text style={styles.youName} numberOfLines={1}>
-            {player?.name ?? "..."}
-          </Text>
+        <View style={styles.iconRow}>
+          <IconButton
+            c={c}
+            name="calendar-outline"
+            onPress={press(() => router.push("/daily"))}
+            testID="menu-daily-button"
+          />
+          <IconButton
+            c={c}
+            name="trophy-outline"
+            onPress={press(() => router.push("/awards"))}
+            testID="menu-awards-button"
+          />
+          <IconButton
+            c={c}
+            name="settings-outline"
+            onPress={press(() => router.push("/settings"))}
+            testID="menu-settings-button"
+          />
         </View>
       </View>
 
       <Animated.View
-        style={styles.heroBlock}
-        entering={FadeInDown.delay(120).duration(600)}
+        entering={FadeInDown.delay(80).duration(500)}
+        style={styles.levelBlock}
       >
-        <Text style={styles.heroLine1} testID="hero-title">
-          Slide
+        <Text style={[styles2.levelLabel, { color: c.textSecondary }]}>
+          LEVEL
         </Text>
-        <View style={styles.heroLine2Row}>
-          <Text style={styles.heroLine2}>every arrow</Text>
-          <Ionicons name="arrow-forward" size={42} color={colors.blue} />
+        <Text
+          style={[styles2.levelNumber, { color: c.text }]}
+          testID="home-level-number"
+        >
+          {continueLevel}
+        </Text>
+        <View style={styles.metaRow}>
+          <View style={styles.metaItem}>
+            <MaterialCommunityIcons
+              name="fire"
+              size={16}
+              color={c.textSecondary}
+            />
+            <Text style={[styles2.metaText, { color: c.textSecondary }]}>
+              {stats.currentWinStreak} win streak
+            </Text>
+          </View>
+          <View style={[styles.dot, { backgroundColor: c.textMuted }]} />
+          <Text style={[styles2.metaText, { color: c.textSecondary }]}>
+            {stats.totalWins} cleared
+          </Text>
         </View>
-        <Text style={styles.heroLine3}>off the grid.</Text>
-        <Text style={styles.heroSub} testID="hero-sub">
-          A minimalist puzzle of paths, order and timing.
-        </Text>
       </Animated.View>
 
       <Animated.View
-        style={styles.menu}
-        entering={FadeInUp.delay(240).duration(600)}
+        entering={FadeInDown.delay(180).duration(500)}
+        style={styles.cta}
       >
-        <MenuButton
-          label="Play"
-          onPress={() => router.push("/game/1")}
-          testID="menu-play-button"
-        />
-        <MenuButton
-          label="Levels"
-          variant="secondary"
-          onPress={() => router.push("/levels")}
-          testID="menu-levels-button"
-        />
-        <MenuButton
-          label="Infinite"
-          variant="secondary"
-          onPress={() => router.push("/game/infinite")}
-          testID="menu-infinite-button"
-        />
-        <MenuButton
-          label="Stats & Leaderboard"
-          variant="secondary"
-          onPress={() => router.push("/stats")}
-          testID="menu-stats-button"
-        />
-      </Animated.View>
+        <Pressable
+          testID="menu-continue-button"
+          onPress={press(() => router.push(`/game/${continueLevel}`))}
+          style={({ pressed }) => [
+            styles2.continueBtn,
+            { backgroundColor: c.text },
+            pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+          ]}
+        >
+          <Text style={[styles2.continueBtnText, { color: c.background }]}>
+            Continue
+          </Text>
+          <Ionicons name="arrow-forward" size={22} color={c.background} />
+        </Pressable>
 
-      <Text style={styles.footer} testID="footer-credit">
-        Tap an arrow to slide it. Clear the board.
-      </Text>
+        <View style={styles.secondaryRow}>
+          <Pressable
+            testID="menu-daily-card"
+            onPress={press(() => router.push("/daily"))}
+            style={({ pressed }) => [
+              styles2.smallCard,
+              { backgroundColor: c.backgroundSecondary, borderColor: c.border },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.cardHead}>
+              <Text style={[styles2.cardKicker, { color: c.textSecondary }]}>
+                DAILY
+              </Text>
+              <Ionicons name="calendar" size={14} color={c.blue} />
+            </View>
+            <Text style={[styles2.cardTitle, { color: c.text }]}>
+              {monthly.done}/{monthly.total}
+            </Text>
+            <View style={[styles2.progressTrack, { backgroundColor: c.border }]}>
+              <View
+                style={[
+                  styles2.progressFill,
+                  {
+                    backgroundColor: c.blue,
+                    width: `${(monthly.done / Math.max(1, monthly.total)) * 100}%`,
+                  },
+                ]}
+              />
+            </View>
+          </Pressable>
+
+          <Pressable
+            testID="menu-awards-card"
+            onPress={press(() => router.push("/awards"))}
+            style={({ pressed }) => [
+              styles2.smallCard,
+              { backgroundColor: c.backgroundSecondary, borderColor: c.border },
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <View style={styles.cardHead}>
+              <Text style={[styles2.cardKicker, { color: c.textSecondary }]}>
+                AWARDS
+              </Text>
+              <Ionicons name="trophy" size={14} color={c.trophyGold} />
+            </View>
+            <Text style={[styles2.cardTitle, { color: c.text }]}>
+              {stats.monthlyTrophies.length}
+            </Text>
+            <Text style={[styles2.cardSub, { color: c.textSecondary }]}>
+              trophies earned
+            </Text>
+          </Pressable>
+        </View>
+
+        <Pressable
+          testID="menu-levels-button"
+          onPress={press(() => router.push("/levels"))}
+          style={({ pressed }) => [
+            styles2.ghostBtn,
+            { borderColor: c.border },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={[styles2.ghostBtnText, { color: c.text }]}>
+            All levels
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={c.text} />
+        </Pressable>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -128,7 +229,6 @@ export default function Home() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
     justifyContent: "space-between",
   },
@@ -138,105 +238,122 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: spacing.md,
   },
-  brand: {
-    fontFamily: fonts.display,
-    fontWeight: "900",
-    color: colors.black,
-    fontSize: 18,
-    letterSpacing: 2,
-  },
-  you: {
-    alignItems: "flex-end",
-    maxWidth: 160,
-  },
-  youLabel: {
-    fontFamily: fonts.ui,
-    fontSize: 10,
-    color: colors.textSecondary,
-    letterSpacing: 2,
-  },
-  youName: {
-    fontFamily: fonts.display,
-    fontWeight: "800",
-    color: colors.black,
-    fontSize: 14,
-  },
-  heroBlock: {
-    marginTop: spacing.xxxl,
-  },
-  heroLine1: {
-    fontFamily: fonts.display,
-    fontWeight: "900",
-    color: colors.black,
-    fontSize: 68,
-    lineHeight: 72,
-    letterSpacing: -2,
-  },
-  heroLine2Row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginTop: -8,
-  },
-  heroLine2: {
-    fontFamily: fonts.display,
-    fontWeight: "900",
-    color: colors.blue,
-    fontSize: 56,
-    lineHeight: 64,
-    letterSpacing: -2,
-  },
-  heroLine3: {
-    fontFamily: fonts.display,
-    fontWeight: "900",
-    color: colors.black,
-    fontSize: 56,
-    lineHeight: 60,
-    letterSpacing: -2,
-    marginTop: -4,
-  },
-  heroSub: {
-    fontFamily: fonts.ui,
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: spacing.md,
-    maxWidth: 280,
-  },
-  menu: {
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  btn: {
-    paddingVertical: 18,
-    paddingHorizontal: spacing.lg,
+  iconRow: { flexDirection: "row", gap: 8 },
+  iconBtn: {
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
   },
-  btnPrimary: {
-    backgroundColor: colors.black,
+  levelBlock: {
+    alignItems: "center",
+    paddingTop: spacing.lg,
   },
-  btnSecondary: {
-    backgroundColor: colors.background,
-    borderWidth: 2,
-    borderColor: colors.black,
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: spacing.md,
   },
-  btnLabel: {
-    fontFamily: fonts.display,
-    fontWeight: "800",
-    fontSize: 18,
-    letterSpacing: 1,
-  },
-  btnLabelPrimary: {
-    color: colors.white,
-  },
-  btnLabelSecondary: {
-    color: colors.black,
-  },
-  footer: {
-    fontFamily: fonts.ui,
-    color: colors.textMuted,
-    fontSize: 12,
-    textAlign: "center",
-    paddingBottom: spacing.sm,
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  dot: { width: 4, height: 4, borderRadius: 2 },
+  cta: { gap: spacing.sm, paddingBottom: spacing.md },
+  secondaryRow: { flexDirection: "row", gap: 8 },
+  cardHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
   },
 });
+
+const buildStyles = (c: ColorPalette) =>
+  StyleSheet.create({
+    brand: {
+      fontFamily: fonts.display,
+      fontWeight: "900",
+      fontSize: 18,
+      letterSpacing: 1,
+    },
+    levelLabel: {
+      fontFamily: fonts.ui,
+      fontSize: 12,
+      letterSpacing: 4,
+    },
+    levelNumber: {
+      fontFamily: fonts.display,
+      fontWeight: "900",
+      fontSize: 136,
+      lineHeight: 140,
+      letterSpacing: -4,
+      marginTop: 4,
+    },
+    metaText: {
+      fontFamily: fonts.ui,
+      fontSize: 12,
+      letterSpacing: 1,
+    },
+    continueBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 20,
+      gap: 10,
+    },
+    continueBtnText: {
+      fontFamily: fonts.display,
+      fontWeight: "800",
+      fontSize: 20,
+      letterSpacing: 1,
+    },
+    smallCard: {
+      flex: 1,
+      padding: spacing.md,
+      borderWidth: 1,
+      minHeight: 96,
+      justifyContent: "space-between",
+    },
+    cardKicker: {
+      fontFamily: fonts.ui,
+      fontSize: 10,
+      letterSpacing: 2,
+    },
+    cardTitle: {
+      fontFamily: fonts.display,
+      fontWeight: "900",
+      fontSize: 28,
+      marginTop: 4,
+    },
+    cardSub: {
+      fontFamily: fonts.ui,
+      fontSize: 11,
+      marginTop: 4,
+    },
+    progressTrack: {
+      height: 4,
+      width: "100%",
+      marginTop: 8,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: 4,
+    },
+    ghostBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 14,
+      borderWidth: 1,
+      gap: 6,
+      marginBottom: 0,
+    },
+    ghostBtnText: {
+      fontFamily: fonts.display,
+      fontWeight: "700",
+      fontSize: 14,
+      letterSpacing: 1,
+    },
+    // typed but rarely used - prevent c-unused warnings
+    _unused: { color: c.text },
+  });

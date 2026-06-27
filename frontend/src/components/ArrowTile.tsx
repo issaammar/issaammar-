@@ -1,5 +1,5 @@
-// Arrow tile that renders a directional arrow icon and animates a slide-off.
-// Uses react-native-reanimated for smooth 60fps motion.
+// Arrow tile: animated arrow that supports slide-off (exits the grid) and
+// bounce (slides forward, hits a wall, returns).
 
 import { Ionicons } from "@expo/vector-icons";
 import React, { forwardRef, useImperativeHandle } from "react";
@@ -16,7 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import type { Direction } from "@/src/game/levels";
-import { colors, timing } from "@/src/game/theme";
+import { timing } from "@/src/game/theme";
 
 const ROTATION: Record<Direction, string> = {
   up: "0deg",
@@ -25,26 +25,29 @@ const ROTATION: Record<Direction, string> = {
   left: "270deg",
 };
 
+const DIR_VEC: Record<Direction, { dx: number; dy: number }> = {
+  up: { dx: 0, dy: -1 },
+  down: { dx: 0, dy: 1 },
+  left: { dx: -1, dy: 0 },
+  right: { dx: 1, dy: 0 },
+};
+
 export type ArrowTileHandle = {
-  slideOff: (
-    dxCells: number,
-    dyCells: number,
-    cellSize: number,
-    onDone: () => void,
-  ) => void;
-  shake: () => void;
+  slideOff: (cells: number, cellSize: number, onDone: () => void) => void;
+  bounce: (cells: number, cellSize: number, onDone: () => void) => void;
 };
 
 export type ArrowTileProps = {
   testID?: string;
   direction: Direction;
-  size: number;       // cell size (px)
+  size: number;
+  color: string;
   onPress: () => void;
   disabled?: boolean;
 };
 
 const ArrowTileInner = forwardRef<ArrowTileHandle, ArrowTileProps>(function ArrowTile(
-  { direction, size, onPress, testID, disabled },
+  { direction, size, color, onPress, testID, disabled },
   ref,
 ) {
   const translateX = useSharedValue(0);
@@ -53,18 +56,19 @@ const ArrowTileInner = forwardRef<ArrowTileHandle, ArrowTileProps>(function Arro
   const scale = useSharedValue(1);
 
   useImperativeHandle(ref, () => ({
-    slideOff: (dxCells, dyCells, cellSize, onDone) => {
+    slideOff: (cells, cellSize, onDone) => {
       cancelAnimation(translateX);
       cancelAnimation(translateY);
       cancelAnimation(opacity);
-      const dx = dxCells * cellSize;
-      const dy = dyCells * cellSize;
-      translateX.value = withTiming(dx, {
+      const { dx, dy } = DIR_VEC[direction];
+      const tx = dx * cells * cellSize;
+      const ty = dy * cells * cellSize;
+      translateX.value = withTiming(tx, {
         duration: timing.slide,
         easing: Easing.out(Easing.cubic),
       });
       translateY.value = withTiming(
-        dy,
+        ty,
         { duration: timing.slide, easing: Easing.out(Easing.cubic) },
         (finished) => {
           if (finished) runOnJS(onDone)();
@@ -75,13 +79,41 @@ const ArrowTileInner = forwardRef<ArrowTileHandle, ArrowTileProps>(function Arro
         easing: Easing.in(Easing.cubic),
       });
     },
-    shake: () => {
-      const amp = 6;
+    bounce: (cells, cellSize, onDone) => {
+      cancelAnimation(translateX);
+      cancelAnimation(translateY);
+      const { dx, dy } = DIR_VEC[direction];
+      // slide forward by `cells` cells (clamped so we don't overlap the
+      // blocker), then snap back. We forward 70% of the available distance
+      // to leave a visible gap and emphasise the rebound.
+      const forwardCells = Math.max(0.45, cells * 0.7);
+      const fx = dx * forwardCells * cellSize;
+      const fy = dy * forwardCells * cellSize;
       translateX.value = withSequence(
-        withTiming(-amp, { duration: 60 }),
-        withTiming(amp, { duration: 60 }),
-        withTiming(-amp / 2, { duration: 60 }),
-        withTiming(0, { duration: 60 }),
+        withTiming(fx, {
+          duration: timing.bounce * 0.55,
+          easing: Easing.out(Easing.cubic),
+        }),
+        withTiming(0, {
+          duration: timing.bounce * 0.7,
+          easing: Easing.inOut(Easing.cubic),
+        }),
+      );
+      translateY.value = withSequence(
+        withTiming(fy, {
+          duration: timing.bounce * 0.55,
+          easing: Easing.out(Easing.cubic),
+        }),
+        withTiming(
+          0,
+          {
+            duration: timing.bounce * 0.7,
+            easing: Easing.inOut(Easing.cubic),
+          },
+          (finished) => {
+            if (finished) runOnJS(onDone)();
+          },
+        ),
       );
     },
   }));
@@ -104,12 +136,7 @@ const ArrowTileInner = forwardRef<ArrowTileHandle, ArrowTileProps>(function Arro
 
   return (
     <Animated.View
-      pointerEvents="box-none"
-      style={[
-        styles.wrapper,
-        { width: size, height: size },
-        animStyle,
-      ]}
+      style={[styles.wrapper, { width: size, height: size }, animStyle]}
     >
       <Pressable
         testID={testID}
@@ -125,11 +152,7 @@ const ArrowTileInner = forwardRef<ArrowTileHandle, ArrowTileProps>(function Arro
             { transform: [{ rotate: ROTATION[direction] }] },
           ]}
         >
-          <Ionicons
-            name="arrow-up"
-            size={Math.round(size * 0.66)}
-            color={colors.black}
-          />
+          <Ionicons name="arrow-up" size={Math.round(size * 0.66)} color={color} />
         </View>
       </Pressable>
     </Animated.View>

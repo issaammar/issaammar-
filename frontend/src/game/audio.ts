@@ -1,27 +1,21 @@
-// Lightweight audio manager around expo-audio.
-// Preloads our short bundled WAV effects once, then exposes simple play()s.
-// Honours a global mute toggle persisted via the storage helper.
+// Lightweight audio + haptics layer. Preloads short bundled WAV effects via
+// expo-audio. Honours `sounds` and `vibrations` settings persisted in
+// /src/game/settings.tsx (read via a module-level mirror that components
+// keep in sync).
 
+import * as Haptics from "expo-haptics";
 import { useAudioPlayer, setAudioModeAsync, AudioPlayer } from "expo-audio";
 import { useEffect, useMemo } from "react";
+import { Platform } from "react-native";
 
-import { storage } from "@/src/utils/storage";
+let soundsEnabled = true;
+let vibrationsEnabled = true;
 
-const STORAGE_KEY = "arrow-maze:sound-enabled";
-
-let soundEnabled = true;
-
-export const loadSoundPreference = async () => {
-  const v = await storage.getItem<boolean>(STORAGE_KEY, true);
-  soundEnabled = v ?? true;
-  return soundEnabled;
+export const setSoundsEnabled = (v: boolean) => {
+  soundsEnabled = v;
 };
-
-export const getSoundEnabled = () => soundEnabled;
-
-export const setSoundEnabled = async (enabled: boolean) => {
-  soundEnabled = enabled;
-  await storage.setItem(STORAGE_KEY, enabled);
+export const setVibrationsEnabled = (v: boolean) => {
+  vibrationsEnabled = v;
 };
 
 export const configureAudioSession = async () => {
@@ -31,12 +25,10 @@ export const configureAudioSession = async () => {
       allowsRecording: false,
     });
   } catch (e) {
-    // session config is best-effort; on web this can no-op
     console.warn("audio session config failed", e);
   }
 };
 
-// Sound assets (require() so Metro bundles them).
 const SOUND_ASSETS = {
   swoosh: require("../../assets/sounds/swoosh.wav"),
   victory: require("../../assets/sounds/victory.wav"),
@@ -45,8 +37,6 @@ const SOUND_ASSETS = {
 
 export type SoundKey = keyof typeof SOUND_ASSETS;
 
-// Hook that hosts the three players. Keep this mounted high in the tree
-// (e.g. root layout) so players persist across screens.
 export const useGameSounds = () => {
   const swoosh = useAudioPlayer(SOUND_ASSETS.swoosh);
   const victory = useAudioPlayer(SOUND_ASSETS.victory);
@@ -54,7 +44,6 @@ export const useGameSounds = () => {
 
   useEffect(() => {
     void configureAudioSession();
-    void loadSoundPreference();
   }, []);
 
   const players = useMemo(
@@ -62,7 +51,6 @@ export const useGameSounds = () => {
     [swoosh, victory, tap],
   );
 
-  // expose globally so non-hook code can trigger sounds
   useEffect(() => {
     globalPlayers = players;
     return () => {
@@ -76,12 +64,11 @@ export const useGameSounds = () => {
 let globalPlayers: { swoosh: AudioPlayer; victory: AudioPlayer; tap: AudioPlayer } | null = null;
 
 const playOne = (p: AudioPlayer | undefined) => {
-  if (!soundEnabled || !p) return;
+  if (!soundsEnabled || !p) return;
   try {
     p.seekTo(0);
     p.play();
   } catch (e) {
-    // swallow — sound failures should never crash gameplay
     console.warn("sound play failed", e);
   }
 };
@@ -89,3 +76,27 @@ const playOne = (p: AudioPlayer | undefined) => {
 export const playSwoosh = () => playOne(globalPlayers?.swoosh);
 export const playVictory = () => playOne(globalPlayers?.victory);
 export const playTap = () => playOne(globalPlayers?.tap);
+
+// Haptics — gated by vibrationsEnabled. No-op on web.
+const isHapticPlatform = Platform.OS === "ios" || Platform.OS === "android";
+
+export const hapticLight = () => {
+  if (!vibrationsEnabled || !isHapticPlatform) return;
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+};
+export const hapticMedium = () => {
+  if (!vibrationsEnabled || !isHapticPlatform) return;
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+};
+export const hapticHeavy = () => {
+  if (!vibrationsEnabled || !isHapticPlatform) return;
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+};
+export const hapticSuccess = () => {
+  if (!vibrationsEnabled || !isHapticPlatform) return;
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+};
+export const hapticError = () => {
+  if (!vibrationsEnabled || !isHapticPlatform) return;
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+};

@@ -1,7 +1,5 @@
 // Game level definitions and procedural generator for the Arrow Maze puzzle.
 // A cell is empty (null) or contains an arrow pointing in one of 4 directions.
-// Tapping an arrow makes it slide in its direction; it can only exit the grid
-// if no other arrow blocks the path between it and the edge.
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -19,12 +17,9 @@ export type Level = {
   title: string;
 };
 
-// ----------------------------------------------------------------------------
-// Procedural generation
-// Place arrows in REVERSE order of clearing — each placed arrow must have a
-// clear path to the edge at time of placement. Guarantees solvability:
-// clearing in the reverse placement order always works.
-// ----------------------------------------------------------------------------
+export type MoveResult =
+  | { ok: true; cells: number }   // cells to slide off the grid (incl. exit cell)
+  | { ok: false; cells: number }; // cells to slide forward before bouncing back
 
 const DIRS: Direction[] = ["up", "down", "left", "right"];
 
@@ -57,6 +52,10 @@ const pathClearToEdge = (
   }
   return true;
 };
+
+// ----------------------------------------------------------------------------
+// Procedural generation: place arrows in REVERSE order of clearing.
+// ----------------------------------------------------------------------------
 
 export const generateProceduralLevel = (
   size: number,
@@ -92,12 +91,7 @@ export const generateProceduralLevel = (
     placed.push(arrow);
   }
 
-  return {
-    id,
-    size,
-    arrows: placed,
-    title,
-  };
+  return { id, size, arrows: placed, title };
 };
 
 function mulberry32(a: number) {
@@ -110,8 +104,8 @@ function mulberry32(a: number) {
 }
 
 // ----------------------------------------------------------------------------
-// Handcrafted levels — generated with the procedural algorithm using stable
-// seeds so we get the same boards every launch but are guaranteed solvable.
+// Handcrafted levels — generated with stable seeds so they're guaranteed
+// solvable and the same on every launch.
 // ----------------------------------------------------------------------------
 
 type Recipe = { id: string; title: string; size: number; arrows: number; seed: number };
@@ -133,18 +127,44 @@ export const HANDCRAFTED: Level[] = RECIPES.map((r) =>
   generateProceduralLevel(r.size, r.arrows, r.seed, r.id, r.title),
 );
 
+// Build an N-th higher level by procedurally extending past the handcrafted
+// set. Used for "Continue" past level 10.
+export const buildHandcraftedOrExtended = (n: number): Level => {
+  if (n <= HANDCRAFTED.length) return HANDCRAFTED[n - 1];
+  // Increase size and arrow count gently
+  const size = Math.min(5 + Math.floor((n - HANDCRAFTED.length) / 3), 9);
+  const arrows = Math.max(10, Math.floor(size * size * 0.55));
+  return generateProceduralLevel(size, arrows, n * 31 + 17, String(n), `Level ${n}`);
+};
+
 // ----------------------------------------------------------------------------
-// Game state helpers
+// Move resolution
 // ----------------------------------------------------------------------------
 
-export const canMove = (
+export const tryMove = (
   arrows: Arrow[],
   size: number,
   arrow: Arrow,
-): boolean => {
+): MoveResult => {
   const grid: (Arrow | null)[][] = Array.from({ length: size }, () =>
     Array(size).fill(null) as (Arrow | null)[],
   );
   for (const a of arrows) grid[a.row][a.col] = a;
-  return pathClearToEdge(grid, arrow.row, arrow.col, arrow.dir);
+  const { dr, dc } = dirDelta(arrow.dir);
+
+  let r = arrow.row + dr;
+  let c = arrow.col + dc;
+  let steps = 0;
+  while (r >= 0 && r < size && c >= 0 && c < size) {
+    if (grid[r][c]) {
+      return { ok: false, cells: steps };
+    }
+    steps++;
+    r += dr;
+    c += dc;
+  }
+  // We walked off the edge => add one more step to actually clear the board
+  return { ok: true, cells: steps + 1 };
 };
+
+export const dirToDelta = dirDelta;
