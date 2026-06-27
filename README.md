@@ -1,2 +1,0 @@
-# issaammar-
-FREE fire
