@@ -1,7 +1,6 @@
-// Gameplay screen. Tap arrows to slide them off the board; if the path is
-// blocked another arrow lies between this arrow and the edge, the arrow
-// slides forward, hits the wall, and bounces back to its original cell.
-// Cleared boards trigger a "Superb!" victory celebration with confetti.
+// Gameplay screen — top bar: back + restart (lavender circles), 3 hearts
+// centered, hash icon bottom-right. Arrows live on a square board. Blocked
+// taps bounce + cost a heart; running out resets the level.
 
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -31,14 +30,13 @@ import {
   tryMove,
 } from "@/src/game/levels";
 import { useSettings } from "@/src/game/settings";
-import { ColorPalette, fonts, spacing, timing, useColors } from "@/src/game/theme";
+import { ColorPalette, fonts, radius, spacing, timing, useColors } from "@/src/game/theme";
 import { usePlayer } from "@/src/game/usePlayer";
 import { useStats, ymd } from "@/src/game/useStats";
 
-// Variety: rotate congratulatory words across wins so it feels alive.
 const CONGRATS = ["Spectacular!", "Superb!", "Brilliant!", "Excellent!", "Fantastic!"];
+const MAX_HEARTS = 3;
 
-// Parse a daily-YYYY-MM-DD style level id into a deterministic seed.
 const parseDailySeed = (id: string): { seed: number; dateKey: string } | null => {
   if (!id.startsWith("daily-")) return null;
   const dateKey = id.slice("daily-".length);
@@ -47,40 +45,24 @@ const parseDailySeed = (id: string): { seed: number; dateKey: string } | null =>
   const y = Number(m[1]);
   const mo = Number(m[2]);
   const d = Number(m[3]);
-  const seed = y * 10000 + mo * 100 + d;
-  return { seed, dateKey };
+  return { seed: y * 10000 + mo * 100 + d, dateKey };
 };
 
 const buildLevel = (id: string, infiniteRound: number): Level => {
   if (id === "infinite") {
     const size = Math.min(4 + Math.floor(infiniteRound / 2), 7);
     const target = Math.max(5, Math.floor(size * size * 0.55));
-    return generateProceduralLevel(
-      size,
-      target,
-      Date.now() + infiniteRound,
-      "infinite",
-      "Infinite",
-    );
+    return generateProceduralLevel(size, target, Date.now() + infiniteRound, "infinite", "Infinite");
   }
   const daily = parseDailySeed(id);
   if (daily) {
-    // size scales with day so each day feels different; cap at 6
     const dayNum = Number(daily.dateKey.slice(-2));
     const size = 4 + (dayNum % 3);
     const target = Math.max(6, Math.floor(size * size * 0.55));
-    return generateProceduralLevel(
-      size,
-      target,
-      daily.seed,
-      id,
-      `Daily ${daily.dateKey}`,
-    );
+    return generateProceduralLevel(size, target, daily.seed, id, `Daily ${daily.dateKey}`);
   }
   const num = Number(id);
-  if (!Number.isFinite(num) || num < 1) {
-    return HANDCRAFTED[0];
-  }
+  if (!Number.isFinite(num) || num < 1) return HANDCRAFTED[0];
   return buildHandcraftedOrExtended(num);
 };
 
@@ -99,17 +81,19 @@ export default function GameScreen() {
   const c = useColors();
   const { settings } = useSettings();
   const { player } = usePlayer();
-  const { recordLevelWin, recordDailyWin } = useStats();
+  const { recordLevelWin, recordDailyWin, breakStreak } = useStats();
 
   const [infiniteRound, setInfiniteRound] = useState(0);
   const [level, setLevel] = useState<Level>(() => buildLevel(levelId, 0));
   const [arrows, setArrows] = useState<Arrow[]>(level.arrows);
   const [exiting, setExiting] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<Set<string>>(new Set()); // bouncing arrows
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [hearts, setHearts] = useState(MAX_HEARTS);
   const [moves, setMoves] = useState(0);
   const [startMs, setStartMs] = useState<number>(() => Date.now());
-  const [elapsed, setElapsed] = useState(0);
+  const [, setElapsed] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [finalTimeMs, setFinalTimeMs] = useState(0);
   const [boardSize, setBoardSize] = useState(0);
   const [congratsWord, setCongratsWord] = useState(CONGRATS[0]);
@@ -127,27 +111,28 @@ export default function GameScreen() {
     setArrows(lvl.arrows);
     setExiting(new Set());
     setBusy(new Set());
+    setHearts(MAX_HEARTS);
     setMoves(0);
     setStartMs(Date.now());
     setElapsed(0);
     setCompleted(false);
+    setFailed(false);
     setFinalTimeMs(0);
     submittedRef.current = false;
     tileRefs.current = {};
   };
 
   useEffect(() => {
-    const lvl = buildLevel(levelId, 0);
+    reset(buildLevel(levelId, 0));
     setInfiniteRound(0);
-    reset(lvl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [levelId]);
 
   useEffect(() => {
-    if (completed) return;
+    if (completed || failed) return;
     const t = setInterval(() => setElapsed(Date.now() - startMs), 250);
     return () => clearInterval(t);
-  }, [completed, startMs]);
+  }, [completed, failed, startMs]);
 
   useEffect(() => {
     if (
@@ -163,7 +148,6 @@ export default function GameScreen() {
       playVictory();
       hapticSuccess();
 
-      // record locally
       if (isDaily) {
         const daily = parseDailySeed(level.id);
         if (daily) recordDailyWin(daily.dateKey);
@@ -171,7 +155,6 @@ export default function GameScreen() {
         recordLevelWin(numericLevel);
       }
 
-      // submit remote
       if (player && !submittedRef.current) {
         submittedRef.current = true;
         void api
@@ -207,13 +190,12 @@ export default function GameScreen() {
   );
 
   const handleTap = (arrow: Arrow) => {
-    if (completed) return;
+    if (completed || failed) return;
     if (exiting.has(arrow.id) || busy.has(arrow.id)) return;
     const cellSize = boardSize / level.size;
     const result = tryMove(activeArrows, level.size, arrow);
 
     if (!result.ok) {
-      // bounce-back: forward to the blocker, then return
       setBusy((cur) => {
         const next = new Set(cur);
         next.add(arrow.id);
@@ -221,6 +203,14 @@ export default function GameScreen() {
       });
       playTap();
       hapticError();
+      setHearts((h) => {
+        const remaining = Math.max(0, h - 1);
+        if (remaining === 0) {
+          setFailed(true);
+          breakStreak();
+        }
+        return remaining;
+      });
       const handle = tileRefs.current[arrow.id];
       handle?.bounce(result.cells, cellSize, () => {
         setBusy((cur) => {
@@ -270,7 +260,7 @@ export default function GameScreen() {
       return;
     }
     if (isDaily) {
-      router.replace("/daily");
+      router.replace("/challenge");
       return;
     }
     if (numericLevel != null) {
@@ -280,13 +270,6 @@ export default function GameScreen() {
     router.replace("/");
   };
 
-  const headerLabel =
-    level.id === "infinite"
-      ? `INFINITE · ROUND ${infiniteRound + 1}`
-      : isDaily
-        ? `DAILY · ${ymd(new Date(parseDailySeed(level.id)!.dateKey + "T00:00:00"))}`
-        : `LEVEL ${level.id}`;
-
   const cellSize = boardSize > 0 ? boardSize / level.size : 0;
   const styles = useMemo(() => buildStyles(c), [c]);
 
@@ -295,46 +278,55 @@ export default function GameScreen() {
       <StatusBar style={settings.darkMode ? "light" : "dark"} />
 
       <View style={styles.header}>
-        <Pressable
-          testID="game-back-button"
-          onPress={() => {
-            playTap();
-            router.back();
-          }}
-          hitSlop={12}
-          style={styles.iconBtn}
-        >
-          <Ionicons name="chevron-back" size={26} color={c.text} />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerLabel} testID="game-header-label">
-            {headerLabel}
-          </Text>
-          <View style={styles.statRow}>
-            <Text style={styles.statText} testID="game-moves">
-              MOVES {moves}
-            </Text>
-            <Text style={styles.statDot}>·</Text>
-            <Text style={styles.statText} testID="game-time">
-              {formatTime(elapsed)}
-            </Text>
-          </View>
+        <View style={styles.headerLeft}>
+          <Pressable
+            testID="game-back-button"
+            onPress={() => {
+              playTap();
+              router.back();
+            }}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.circleBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons name="play" size={18} color={c.text} style={{ transform: [{ rotate: "180deg" }] }} />
+          </Pressable>
+          <Pressable
+            testID="game-restart-button"
+            onPress={() => {
+              playTap();
+              reset(
+                level.id === "infinite"
+                  ? buildLevel("infinite", infiniteRound)
+                  : level,
+              );
+            }}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.circleBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Ionicons name="refresh" size={18} color={c.text} />
+          </Pressable>
         </View>
-        <Pressable
-          testID="game-restart-button"
-          onPress={() => {
-            playTap();
-            reset(
-              level.id === "infinite"
-                ? buildLevel("infinite", infiniteRound)
-                : level,
-            );
-          }}
-          hitSlop={12}
-          style={styles.iconBtn}
-        >
-          <Ionicons name="refresh" size={24} color={c.text} />
-        </Pressable>
+
+        <View style={styles.heartsRow} testID="hearts-row">
+          {Array.from({ length: MAX_HEARTS }).map((_, i) => (
+            <Ionicons
+              key={i}
+              name={i < hearts ? "heart" : "heart-outline"}
+              size={26}
+              color={i < hearts ? c.danger : c.locked}
+              testID={`heart-${i}`}
+              style={{ marginHorizontal: 2 }}
+            />
+          ))}
+        </View>
+
+        <View style={styles.headerRight} />
       </View>
 
       <View style={styles.boardWrap}>
@@ -343,26 +335,6 @@ export default function GameScreen() {
           style={styles.board}
           onLayout={(e) => setBoardSize(e.nativeEvent.layout.width)}
         >
-          {boardSize > 0 &&
-            Array.from({ length: level.size + 1 }).map((_, i) => (
-              <View
-                key={`v-${i}`}
-                style={[
-                  styles.gridLine,
-                  { left: i * cellSize, top: 0, width: 1, height: boardSize },
-                ]}
-              />
-            ))}
-          {boardSize > 0 &&
-            Array.from({ length: level.size + 1 }).map((_, i) => (
-              <View
-                key={`h-${i}`}
-                style={[
-                  styles.gridLine,
-                  { top: i * cellSize, left: 0, height: 1, width: boardSize },
-                ]}
-              />
-            ))}
           {boardSize > 0 &&
             arrows.map((a) => (
               <View
@@ -390,17 +362,61 @@ export default function GameScreen() {
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerHint} testID="footer-hint">
+      <View style={styles.footerRow}>
+        <Text style={styles.headerLabel} testID="game-header-label">
           {level.id === "infinite"
-            ? "Tap an arrow to slide it. Survive as long as you can."
-            : "Tap an arrow. Blocked arrows bounce back."}
+            ? `INFINITE · ROUND ${infiniteRound + 1}`
+            : isDaily
+              ? `DAILY · ${parseDailySeed(level.id)!.dateKey}`
+              : `LEVEL ${level.id} · MOVES ${moves}`}
         </Text>
+        <View style={styles.hashBtn} testID="game-grid-icon">
+          <Ionicons name="grid-outline" size={20} color={c.text} />
+        </View>
       </View>
+
+      {failed && (
+        <Animated.View
+          style={[styles.overlay, { pointerEvents: "auto" }]}
+          entering={FadeIn.duration(280)}
+        >
+          <Text style={styles.overlayTitle} testID="game-over-text">
+            Out of hearts
+          </Text>
+          <Text style={styles.overlaySub}>Tap to try again.</Text>
+          <Pressable
+            testID="retry-button"
+            onPress={() => {
+              playTap();
+              hapticLight();
+              reset(level.id === "infinite" ? buildLevel("infinite", infiniteRound) : level);
+            }}
+            style={({ pressed }) => [
+              styles.playPill,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.playPillText}>Retry</Text>
+          </Pressable>
+          <Pressable
+            testID="back-to-menu-button"
+            onPress={() => {
+              playTap();
+              router.replace("/");
+            }}
+            style={({ pressed }) => [
+              styles.menuBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={styles.menuBtnText}>Home</Text>
+          </Pressable>
+        </Animated.View>
+      )}
 
       {completed && (
         <Animated.View
-          style={[styles.victoryOverlay, { pointerEvents: "auto" }]}
+          style={[styles.overlay, { pointerEvents: "auto" }]}
           entering={FadeIn.duration(timing.victoryIn)}
         >
           <Confetti active />
@@ -413,40 +429,37 @@ export default function GameScreen() {
           </Animated.Text>
           <Animated.View
             entering={FadeInDown.delay(220).duration(500)}
-            style={styles.victoryStatsRow}
+            style={styles.statsRow}
           >
-            <View style={styles.victoryStat}>
-              <Text style={styles.victoryStatLabel}>TIME</Text>
-              <Text style={styles.victoryStatValue}>
-                {formatTime(finalTimeMs)}
-              </Text>
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>TIME</Text>
+              <Text style={styles.statValue}>{formatTime(finalTimeMs)}</Text>
             </View>
-            <View style={styles.victoryDivider} />
-            <View style={styles.victoryStat}>
-              <Text style={styles.victoryStatLabel}>MOVES</Text>
-              <Text style={styles.victoryStatValue}>{moves}</Text>
+            <View style={styles.divider} />
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>MOVES</Text>
+              <Text style={styles.statValue}>{moves}</Text>
             </View>
           </Animated.View>
           <Animated.View
             entering={FadeInDown.delay(360).duration(500)}
-            style={styles.victoryButtons}
+            style={styles.actionStack}
           >
             <Pressable
               testID="next-level-button"
               onPress={handleNext}
               style={({ pressed }) => [
-                styles.btnPrimary,
+                styles.playPill,
                 pressed && { opacity: 0.9 },
               ]}
             >
-              <Text style={styles.btnPrimaryText}>
+              <Text style={styles.playPillText}>
                 {level.id === "infinite"
                   ? "Next round"
                   : isDaily
                     ? "Back to calendar"
                     : "Next level"}
               </Text>
-              <Ionicons name="arrow-forward" size={22} color={c.background} style={{ marginLeft: 10 }} />
             </Pressable>
             <Pressable
               testID="back-to-menu-button"
@@ -455,11 +468,11 @@ export default function GameScreen() {
                 router.replace("/");
               }}
               style={({ pressed }) => [
-                styles.btnSecondary,
+                styles.menuBtn,
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={styles.btnSecondaryText}>Menu</Text>
+              <Text style={styles.menuBtnText}>Home</Text>
             </Pressable>
           </Animated.View>
         </Animated.View>
@@ -476,25 +489,26 @@ const buildStyles = (c: ColorPalette) =>
       justifyContent: "space-between",
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
-      paddingBottom: spacing.md,
+      paddingBottom: spacing.sm,
     },
-    iconBtn: { padding: 4, minWidth: 30, alignItems: "center" },
-    headerCenter: { flex: 1, alignItems: "center", gap: 2 },
+    headerLeft: { flexDirection: "row", gap: 10, width: 100 },
+    headerRight: { width: 100 },
+    circleBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: c.backgroundSecondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    heartsRow: { flexDirection: "row", alignItems: "center" },
     headerLabel: {
       fontFamily: fonts.display,
-      fontWeight: "900",
-      fontSize: 12,
+      fontWeight: "800",
+      fontSize: 11,
       letterSpacing: 2,
-      color: c.text,
-    },
-    statRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-    statText: {
-      fontFamily: fonts.ui,
-      fontSize: 12,
       color: c.textSecondary,
-      letterSpacing: 1,
     },
-    statDot: { color: c.textMuted, fontSize: 12 },
     boardWrap: {
       flex: 1,
       paddingHorizontal: spacing.lg,
@@ -508,81 +522,97 @@ const buildStyles = (c: ColorPalette) =>
       position: "relative",
       overflow: "hidden",
     },
-    gridLine: { position: "absolute", backgroundColor: c.border },
-    footer: {
+    footerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.md,
+    },
+    hashBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: c.backgroundSecondary,
       alignItems: "center",
+      justifyContent: "center",
     },
-    footerHint: {
-      fontFamily: fonts.ui,
-      fontSize: 12,
-      color: c.textMuted,
-      textAlign: "center",
-    },
-    victoryOverlay: {
+    overlay: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: c.background,
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: spacing.lg,
     },
+    overlayTitle: {
+      fontFamily: fonts.display,
+      fontWeight: "900",
+      color: c.text,
+      fontSize: 38,
+      letterSpacing: -1,
+      marginBottom: 6,
+    },
+    overlaySub: {
+      fontFamily: fonts.ui,
+      color: c.textSecondary,
+      fontSize: 14,
+      marginBottom: spacing.xl,
+    },
     victoryText: {
       fontFamily: fonts.display,
       fontWeight: "900",
-      color: c.victory,
-      fontSize: 64,
-      letterSpacing: -2,
+      color: c.blue,
+      fontSize: 56,
+      letterSpacing: -1.5,
       textAlign: "center",
     },
-    victoryStatsRow: {
+    statsRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: spacing.lg,
       marginTop: spacing.xl,
     },
-    victoryStat: { alignItems: "center" },
-    victoryStatLabel: {
+    statCell: { alignItems: "center" },
+    statLabel: {
       fontFamily: fonts.ui,
       color: c.textSecondary,
       fontSize: 11,
       letterSpacing: 2,
     },
-    victoryStatValue: {
+    statValue: {
       fontFamily: fonts.display,
       fontWeight: "900",
       color: c.text,
-      fontSize: 32,
+      fontSize: 30,
       marginTop: 4,
     },
-    victoryDivider: { width: 1, height: 36, backgroundColor: c.text },
-    victoryButtons: {
+    divider: { width: 1, height: 32, backgroundColor: c.border },
+    actionStack: {
       marginTop: spacing.xxl,
       width: "100%",
       gap: spacing.sm,
+      alignItems: "center",
     },
-    btnPrimary: {
-      flexDirection: "row",
+    playPill: {
+      backgroundColor: c.blue,
+      paddingVertical: 16,
+      paddingHorizontal: spacing.xl,
+      borderRadius: radius.pill,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: c.text,
-      paddingVertical: 18,
-      paddingHorizontal: spacing.lg,
+      minWidth: 220,
     },
-    btnPrimaryText: {
+    playPillText: {
       fontFamily: fonts.display,
       fontWeight: "800",
       fontSize: 18,
-      color: c.background,
-      letterSpacing: 1,
+      color: c.white,
+      letterSpacing: 0.5,
     },
-    btnSecondary: {
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 16,
-      backgroundColor: "transparent",
+    menuBtn: {
+      paddingVertical: 12,
     },
-    btnSecondaryText: {
+    menuBtnText: {
       fontFamily: fonts.ui,
       fontSize: 14,
       color: c.textSecondary,

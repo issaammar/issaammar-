@@ -21,7 +21,6 @@ const ThemedShell = () => {
   const c = useColors();
   const { settings } = useSettings();
 
-  // mirror settings into the audio/haptics module (module-level cache)
   useEffect(() => {
     setSoundsEnabled(settings.sounds);
   }, [settings.sounds]);
@@ -29,7 +28,6 @@ const ThemedShell = () => {
     setVibrationsEnabled(settings.vibrations);
   }, [settings.vibrations]);
 
-  // mount audio players once at the root
   useGameSounds();
 
   return (
@@ -40,7 +38,10 @@ const ThemedShell = () => {
           contentStyle: { backgroundColor: c.background },
           animation: "fade",
         }}
-      />
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="game/[id]" options={{ animation: "slide_from_right" }} />
+      </Stack>
     </View>
   );
 };

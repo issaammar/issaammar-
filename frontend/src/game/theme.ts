@@ -1,5 +1,6 @@
 // Dynamic light/dark theme. Static spacing/font tokens; colors come from a
 // hook so callers re-render when dark mode flips.
+// Palette aligned with the reference "Arrows" app (lavender / indigo).
 
 import { Platform } from "react-native";
 
@@ -7,13 +8,14 @@ import { useSettings } from "@/src/game/settings";
 
 export type ColorPalette = {
   background: string;
-  backgroundSecondary: string;
+  backgroundSecondary: string;   // soft lavender card bg
   surface: string;
+  surfaceStrong: string;          // selected tab pill bg
   text: string;
   textSecondary: string;
   textMuted: string;
   victory: string;
-  blue: string;
+  blue: string;                   // primary indigo accent
   blueSoft: string;
   border: string;
   borderStrong: string;
@@ -22,37 +24,45 @@ export type ColorPalette = {
   white: string;
   black: string;
   trophyGold: string;
+  success: string;                // calendar completed
+  danger: string;                 // hearts
+  toggleOff: string;
 };
 
 export const LIGHT: ColorPalette = {
-  background: "#FFFFFF",
-  backgroundSecondary: "#F4F4F6",
+  background: "#F5F5FC",
+  backgroundSecondary: "#ECEAF7",
   surface: "#FFFFFF",
-  text: "#0A0A0F",
-  textSecondary: "#6E6E78",
-  textMuted: "#B5B5B5",
-  victory: "#0044FF",
-  blue: "#0044FF",
-  blueSoft: "#D8E2FF",
-  border: "#EBEBEB",
-  borderStrong: "#0A0A0F",
-  locked: "#D1D1D1",
-  arrow: "#0A0A0F",
+  surfaceStrong: "#DCD9F0",
+  text: "#1B1D3A",
+  textSecondary: "#7C7DA4",
+  textMuted: "#B5B7D4",
+  victory: "#5C5BE6",
+  blue: "#5C5BE6",
+  blueSoft: "#D5D3F7",
+  border: "#E1DEF3",
+  borderStrong: "#1B1D3A",
+  locked: "#CFCFE4",
+  arrow: "#1B1D3A",
   white: "#FFFFFF",
-  black: "#0A0A0F",
+  black: "#1B1D3A",
   trophyGold: "#F1B900",
+  success: "#22C55E",
+  danger: "#FF5B6E",
+  toggleOff: "#2A2C4F",
 };
 
 export const DARK: ColorPalette = {
   background: "#0E1320",
   backgroundSecondary: "#181F32",
   surface: "#1B2236",
+  surfaceStrong: "#2A3454",
   text: "#FFFFFF",
   textSecondary: "#9DA6BC",
   textMuted: "#5B6377",
-  victory: "#5A8BFF",
-  blue: "#5A8BFF",
-  blueSoft: "#1E2A4D",
+  victory: "#8C8BF5",
+  blue: "#8C8BF5",
+  blueSoft: "#283255",
   border: "#232B41",
   borderStrong: "#FFFFFF",
   locked: "#2F3651",
@@ -60,6 +70,9 @@ export const DARK: ColorPalette = {
   white: "#FFFFFF",
   black: "#0A0A0F",
   trophyGold: "#F1B900",
+  success: "#34D399",
+  danger: "#FF7384",
+  toggleOff: "#3B4467",
 };
 
 export const useColors = (): ColorPalette => {
@@ -92,9 +105,10 @@ export const fonts = {
 } as const;
 
 export const radius = {
-  sm: 0,
-  md: 14,
-  lg: 24,
+  sm: 12,
+  md: 16,
+  lg: 22,
+  xl: 28,
   pill: 999,
 } as const;
 
