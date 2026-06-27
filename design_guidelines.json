@@ -1,0 +1,134 @@
+{
+  "theme": "Light",
+  "archetype": "Swiss & High-Contrast",
+  "design_philosophy": "Pure minimalist. High emphasis on frictionless gameplay, stark contrast, and satisfying motion. No generic cards, no purple gradients. Confident use of white space.",
+  "typography": {
+    "headings": {
+      "fontFamily": "Clash Display",
+      "weights": ["600", "700"],
+      "usage": "Victory text ('Spectacular!'), Main Menu titles, Level numbers"
+    },
+    "body": {
+      "fontFamily": "Outfit",
+      "weights": ["400", "500", "600"],
+      "usage": "Timers, move counters, stats, buttons, standard UI text"
+    }
+  },
+  "colors": {
+    "background": {
+      "primary": "#FFFFFF",
+      "secondary": "#F8F8F8"
+    },
+    "text": {
+      "primary": "#000000",
+      "secondary": "#7A7A7A",
+      "victory": "#0044FF"
+    },
+    "accent": {
+      "blue": "#0044FF",
+      "confetti_colors": ["#0044FF", "#FFFFFF", "#CCDDFF"]
+    },
+    "elements": {
+      "arrow_black": "#000000",
+      "grid_lines": "#EBEBEB",
+      "locked": "#D1D1D1"
+    }
+  },
+  "layout": {
+    "screen_padding": "24px",
+    "grid": {
+      "gap": "4px",
+      "max_width": "100%",
+      "alignment": "center"
+    }
+  },
+  "components": {
+    "arrow_tile": {
+      "shape": "Perfect square.",
+      "background": "Transparent or extremely subtle #FAFAFA.",
+      "border": "None by default. Active/focus state may have a 1px black outline.",
+      "icon": {
+        "color": "#000000",
+        "strokeWidth": "3px",
+        "capStyle": "round",
+        "joinStyle": "round",
+        "style": "Minimalist sharp vector arrow. Not heavily rounded, strictly geometric."
+      }
+    },
+    "buttons": {
+      "primary": {
+        "background": "#000000",
+        "text": "#FFFFFF",
+        "borderRadius": "0px",
+        "padding": "16px 32px",
+        "fontFamily": "Clash Display"
+      },
+      "secondary": {
+        "background": "transparent",
+        "text": "#000000",
+        "border": "2px solid #000000",
+        "borderRadius": "0px",
+        "padding": "14px 30px"
+      }
+    }
+  },
+  "animations": {
+    "tap_feedback": {
+      "action": "press-in",
+      "effect": "Scale down to 0.90 using React Native spring physics. Restore to 1.0 on release."
+    },
+    "slide_off": {
+      "trigger": "Arrow tapped",
+      "effect": "Arrow translates along its direction vector (e.g., if pointing right, translateX: +width_of_grid) over 300ms. Use easeOut easing. Opacity transitions to 0 in the final 100ms."
+    },
+    "victory_text": {
+      "trigger": "Level complete",
+      "effect": "Scale from 0.4 to 1.0 with a bounce spring. Opacity from 0 to 1 over 400ms."
+    },
+    "confetti": {
+      "trigger": "Level complete",
+      "effect": "Continuous emission of rectangular and circular particles from the top of the screen. Colors: #0044FF and #FFFFFF. Varying fall speeds and rotation rates."
+    }
+  },
+  "screens": {
+    "splash_menu": {
+      "layout": "Vertical stack, perfectly centered. Massive game title in Clash Display. Generous vertical spacing (48px) between title and menu buttons.",
+      "background": "#FFFFFF",
+      "elements": ["Play Button", "Levels Button", "Stats/Leaderboard Button"]
+    },
+    "level_select": {
+      "layout": "Grid layout (3-4 columns). Handcrafted levels first, then a section for 'Infinite Procedural'.",
+      "tile_style": "Square tiles. Completed levels have a thick 2px black border and black text. Locked levels have a 1px light gray border (#D1D1D1) and gray text."
+    },
+    "gameplay": {
+      "header": "Flex row. Left: Back/Menu icon. Center: Level Number (bold). Right: Move counter or Timer.",
+      "body": "Centered N x N grid containing the interlocking arrows. Maximize screen width minus padding.",
+      "footer": "Subtle text button for 'Restart' centered at the bottom."
+    },
+    "victory": {
+      "layout": "Absolute overlay on top of the cleared grid.",
+      "background": "White (#FFFFFF) fading in with 95% opacity.",
+      "content": "Centered text 'Spectacular!' in bold blue (#0044FF) using Clash Display at text-5xl equivalent. Next Level button below it.",
+      "effects": "Confetti system active."
+    },
+    "stats": {
+      "layout": "Minimalist list view. High contrast black lines separating rows. Displaying Best Times, Levels Completed, and Global Leaderboard rank."
+    }
+  },
+  "states": {
+    "loading": "A minimal, solid black square that scales up and down or rotates sharply 90 degrees.",
+    "error": "Bold black text: 'Error.' followed by a brief gray description. Single black 'Retry' button.",
+    "empty": "Used for empty leaderboards. Centered text: 'No records.' in #7A7A7A."
+  },
+  "testing": {
+    "attributes": [
+      "data-testid=\"menu-play-button\"",
+      "data-testid=\"menu-levels-button\"",
+      "data-testid=\"menu-stats-button\"",
+      "data-testid=\"gameplay-grid\"",
+      "data-testid=\"arrow-tile-x-y\"",
+      "data-testid=\"victory-text\"",
+      "data-testid=\"next-level-button\""
+    ]
+  }
+}
