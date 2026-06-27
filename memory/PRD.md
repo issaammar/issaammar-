@@ -1,56 +1,52 @@
-# Arrow Maze — Product Requirements (MVP)
+# Arrow Maze — Product Requirements
 
-A minimalist 2D mobile puzzle game where players tap interlocking arrow tiles
-on a clean white grid; tapping an arrow makes it slide along its direction
-and fly off the board — but only if the path to the edge is clear. Clearing
-the entire board triggers a bold blue "Spectacular!" celebration with falling
-blue and white confetti.
+Minimalist 2D mobile puzzle. Players tap interlocking arrow tiles on a grid;
+each tapped arrow slides along its direction. If the path is clear it exits
+the board, otherwise it slides forward, hits the blocker, and bounces back
+to its origin. Clearing the board triggers a confetti celebration with a
+rotating congratulatory word.
 
 ## Stack
-- Frontend: Expo SDK 54, React Native 0.81, expo-router 6
-- Animations: react-native-reanimated 4
-- Audio: expo-audio (bundled WAV: swoosh, tap, victory)
+- Expo SDK 54, expo-router 6, React Native 0.81, Reanimated 4
+- Audio: expo-audio (bundled WAV); Haptics: expo-haptics
 - Backend: FastAPI + MongoDB (motor)
 - Storage: AsyncStorage via /app/frontend/src/utils/storage
 
 ## Screens
-- `/` Home — bold typographic menu (Play, Levels, Infinite, Stats)
-- `/levels` Level grid (10 handcrafted + endless Infinite)
-- `/game/[id]` Gameplay (taps, slide-off, victory overlay)
-- `/stats` Player profile, personal bests, global leaderboard
+- `/` Home — big LEVEL number, Continue, Daily/Awards cards, All-levels, 3
+  icon shortcuts (daily/awards/settings)
+- `/levels` Stages grid + Infinite tile
+- `/game/[id]` Gameplay (numeric levels, `infinite`, `daily-YYYY-MM-DD`)
+- `/daily` Calendar with progress + monthly trophy
+- `/awards` Stat cards + 12-month trophy grid
+- `/settings` Language, Vibrations, Sounds, Dark Mode, Native Refresh Rate
 
-## Core gameplay
-- Grid of N×N cells. Each occupied cell holds an arrow pointing up/down/left/right.
-- Tap arrow → if no other arrow lies between it and the grid edge in its
-  direction, it animates a slide off the board and is removed.
-- Blocked taps trigger a shake animation; MOVES is not incremented.
-- Goal: clear every arrow.
-- Handcrafted levels are generated with the procedural algorithm using fixed
-  seeds, which guarantees solvability and stable layouts.
-- Infinite mode increases grid size (4→7) and arrow density per round.
+## Theme
+- Light + Dark palettes exposed via `useColors()` hook; switching is instant
+  and persisted in `arrow-maze:settings-v1`.
+
+## Mechanics
+- `tryMove(arrows, size, arrow)` → `{ ok, cells }`; `cells` is exit distance
+  on ok, or forward distance before the blocker on fail.
+- `ArrowTile.slideOff(cells)` translates and fades; `ArrowTile.bounce(cells)`
+  forwards 70% then snaps back.
+- Sounds gated by `sounds`; haptics gated by `vibrations`.
+- Victory rotates between Spectacular/Superb/Brilliant/Excellent/Fantastic.
+
+## Stats (local)
+- `arrow-maze:stats-v1`: currentLevel, highestLevel, totalWins,
+  currentWinStreak, longestWinStreak, longestDayStreak, currentDayStreak,
+  completedDailies[], monthlyTrophies[].
+- Monthly trophy unlocks when every day of a month is cleared.
 
 ## Backend API (prefix `/api`)
-- `POST /players` — create or fetch a player by name (idempotent).
-- `GET /players/{id}` — fetch a player.
-- `POST /scores` — submit a completed level run.
-- `GET /scores/leaderboard?limit=` — global top scores by fastest time.
-- `GET /scores/leaderboard/{level_id}?limit=` — per-level leaderboard.
-- `GET /scores/recent?limit=` — most recent submissions.
-- `GET /stats/{player_id}` — levels_completed, total_plays, total_moves, best_times.
-
-## Persistence
-- Local: `arrow-maze:player` (id+name), `arrow-maze:progress-v1` (completed
-  levels, best times/moves), `arrow-maze:sound-enabled`.
-- Remote: MongoDB collections `players` and `scores` (no `_id` exposed).
-
-## Design
-- Pure minimalist white/black with `#0044FF` blue accent.
-- Bold display fonts for headings/victory. UI sans for body.
-- Square tiles, 0px radius, sharp lines (per design_guidelines.json).
-- Confetti: 70 particles, blue/white, falling with rotation + drift.
+- `POST /players` (idempotent by name)
+- `POST /scores` — submit completion
+- `GET /scores/leaderboard[?limit]` and `GET /scores/leaderboard/{level_id}`
+- `GET /scores/recent`
+- `GET /stats/{player_id}`
 
 ## Status
-- Backend endpoints implemented and verified via curl.
-- All four screens render and gameplay loop completes end-to-end (taps →
-  slide → victory → next).
-- Procedural-seeded handcrafted levels are guaranteed solvable.
+- Backend pytest 10/10 ✅
+- Frontend tests across home, settings, daily, awards, levels, gameplay,
+  bounce-back, victory and deep-links all ✅

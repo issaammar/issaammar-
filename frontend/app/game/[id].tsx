@@ -523,7 +523,6 @@ const buildStyles = (c: ColorPalette) =>
     victoryOverlay: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: c.background,
-      opacity: 0.985,
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: spacing.lg,

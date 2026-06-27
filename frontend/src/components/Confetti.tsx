@@ -138,7 +138,7 @@ export const Confetti = React.memo(function Confetti({
 
   if (!active) return null;
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }]}>
       {particles.map((p) => (
         <ConfettiPiece
           key={p.key}
